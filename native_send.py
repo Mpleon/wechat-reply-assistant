@@ -1,7 +1,7 @@
 from pathlib import Path
 import ctypes,time,json,sys,xml.etree.ElementTree as ET
 import native_access as n
-BASE=Path(__file__).resolve().parent
+from runtime_paths import DATA_DIR as BASE,RESOURCE_DIR
 from runtime_paths import CONFIG
 TARGET=CONFIG.get('target_name','')
 if (BASE/'peer.json').exists():TARGET=json.loads((BASE/'peer.json').read_text(encoding='utf-8'))['display_name']

@@ -7,8 +7,9 @@ from app_store import Store,Conflict,DEFAULTS,now
 from app_engine import Engine
 from app_contacts import Contacts
 import app_models
-BASE=Path(__file__).resolve().parent
-WEB=BASE/'web'
+from app_version import VERSION
+from runtime_paths import DATA_DIR as BASE,RESOURCE_DIR
+WEB=RESOURCE_DIR/'web'
 class Application:
     def __init__(self,store=None,secret_store=None,engine=None):
         data=BASE/'app-data';data.mkdir(exist_ok=True)
@@ -46,7 +47,8 @@ class Application:
             profiles.append(profile)
         stickers=[{k:s.get(k) for k in ('md5','description','file','native_verified')} for s in app_models.catalog()]
         with self.test_lock:tests=list(self.tests.values())[-8:]
-        return {'csrf':self.token,'peer_id':peer_id or 'legacy','contacts':self.contacts.list(),'runtime':engine.snapshot(),'settings':cfg,'jobs':local.jobs(),
+        from runtime_paths import CONFIG
+        return {'version':VERSION,'setup':{'required':not bool(CONFIG.get('data_root')),'data_dir':str(BASE)},'csrf':self.token,'peer_id':peer_id or 'legacy','contacts':self.contacts.list(),'runtime':engine.snapshot(),'settings':cfg,'jobs':local.jobs(),
                 'messages':local.messages(),'events':local.events(),'calls':local.calls(),'stickers':stickers,'tests':tests,'profiles':profiles}
     def test_model(self,payload):
         cfg={**self.store.settings(),**{k:v for k,v in payload.get('settings',{}).items() if k in DEFAULTS}}
@@ -82,6 +84,24 @@ class Application:
         self.test_pool.submit(work)
         return {'id':testid}
     def action(self,path,p):
+        if path=='/api/update/check':
+            from app_update import check_update
+            return check_update()
+        if path=='/api/setup':
+            from runtime_paths import CONFIG,LOCAL_FILE
+            if CONFIG.get('data_root'):raise Conflict('已完成首次配置，请勿覆盖已有微信账号的数据目录')
+            folder=Path(p.get('data_root','')).expanduser().resolve()
+            identifier=p.get('identifier','')
+            if not isinstance(identifier,str) or not identifier.strip() or len(identifier)>200:raise ValueError('请填写首位联系人的微信号或 wxid')
+            if not folder.is_dir() or len([x for x in folder.iterdir() if (x/'db_storage').is_dir()])!=1:raise ValueError('请选择包含一个已登录账号的 xwechat_files 目录')
+            with self.contacts.read_lock,self.contacts.lock:
+                if CONFIG.get('data_root'):raise Conflict('已完成首次配置')
+                CONFIG['data_root']=str(folder)
+                LOCAL_FILE.write_text(json.dumps(CONFIG,ensure_ascii=False,indent=2),encoding='utf-8')
+                record=self.contacts.records['legacy'];record.update(username=identifier.strip(),identifier=identifier.strip(),display_name=identifier.strip())
+                self.contacts._save(record);self.contacts.reader=None
+                self.contacts.get().commands.put(('reconnect',None))
+            return {'ok':True}
         if path=='/api/contacts/add':return self.contacts.add(p.get('identifier',''))
         if path=='/api/control' and p.get('all') and p.get('enabled') is not True:return self.contacts.stop_all()
         engine=self.contacts.get(p.get('peer_id'))

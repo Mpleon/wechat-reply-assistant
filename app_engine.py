@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import copy,hashlib,json,os,queue,threading,time,xml.etree.ElementTree as ET
 from app_store import Conflict,now
 import app_models
-BASE=Path(__file__).resolve().parent
+from runtime_paths import DATA_DIR as BASE,RESOURCE_DIR
 SEND_LOCK=threading.RLock()
 
 def message_id(m):return str(m['server_id']) if m['server_id'] else m['database']+':'+str(m['local_id'])

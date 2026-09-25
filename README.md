@@ -2,7 +2,15 @@
 
 打开 **http://127.0.0.1:8765**。这是本机管理页面，不对公网开放。
 
-## 首次部署
+## Windows 应用版
+
+从 [GitHub Releases](https://github.com/Mpleon/wechat-reply-assistant/releases) 下载 Windows x64 安装包，安装后打开“微信回复台”。无需自行安装 Python；首次在页面配置微信目录、联系人与模型。需要 WebView2 Runtime。用户数据保存在 `%LOCALAPPDATA%\WechatReplyAssistant`，不会打进安装包。
+
+应用底部“检查更新”可发现新版并打开下载页，关闭应用后安装新版即可覆盖升级并保留数据；当前不做静默下载安装。桌面窗口关闭时服务结束，重启默认暂停。源码版与应用版互斥运行，数据默认各自独立，不会自动复制本机旧聊天或 Key。
+
+开发构建与版本发布见 [docs/RELEASING.md](docs/RELEASING.md)。
+
+## 首次部署（源码版）
 
 1. 安装 Python 3.12+，在项目目录运行 `setup.ps1`。
 2. 编辑本机 `local-runtime.json`：填写 `xwechat_files` 目录和目标联系人备注；如已有 `peer.json` 稳定账号标识则优先使用它。

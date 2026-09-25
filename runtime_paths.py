@@ -3,7 +3,10 @@ from pathlib import Path
 import json,os,sys
 
 BASE=Path(__file__).resolve().parent
-LOCAL_FILE=BASE/'local-runtime.json'
+RESOURCE_DIR=BASE
+DATA_DIR=Path(os.environ.get('WECHAT_ASSISTANT_HOME') or (str(Path(os.environ['LOCALAPPDATA'])/'WechatReplyAssistant') if getattr(sys,'frozen',False) else str(BASE))).resolve()
+DATA_DIR.mkdir(parents=True,exist_ok=True)
+LOCAL_FILE=DATA_DIR/'local-runtime.json'
 CONFIG=json.loads(LOCAL_FILE.read_text(encoding='utf-8-sig')) if LOCAL_FILE.exists() else {}
 DEPS=Path(os.environ.get('WECHAT_ASSISTANT_DEPS') or CONFIG.get('deps_dir') or BASE/'.deps').expanduser()
 UPSTREAM=BASE/'vendor'/'wechatauto'

@@ -1,7 +1,8 @@
 from pathlib import Path
 import json,ctypes
 import native_access as n
-p=Path(__file__).resolve().parent/'accessibility-state.json'
+from runtime_paths import DATA_DIR
+p=DATA_DIR/'accessibility-state.json'
 state=json.loads(p.read_text(encoding='utf-8'))
 pid=n.WeChatUIA._pid_from_hwnd(n.window())
 if pid!=state['pid']:raise RuntimeError('WeChat process changed; no restore needed')

@@ -1,7 +1,7 @@
 """Read encrypted SQLite pages on demand, with a committed WAL snapshot."""
 from pathlib import Path
 import sys,ast,json,hashlib,hmac,struct,collections,base64
-from runtime_paths import UPSTREAM as AUDIT,data_root,CONFIG
+from runtime_paths import UPSTREAM as AUDIT,data_root,CONFIG,DATA_DIR
 from wechat_backend import scope,wal_frames
 import apsw,zstandard
 def signature(p):
@@ -64,7 +64,7 @@ class Reader:
         self.vfs=ReadVFS(keys)
         self.self_id=self.root.parent.name.rsplit('_',1)[0]
         if contact_only:return
-        peer_file=Path(__file__).resolve().parent/'peer.json'
+        peer_file=DATA_DIR/'peer.json'
         if peer_file.exists():
             peer=json.loads(peer_file.read_text(encoding='utf-8'))
             found=self.query(self.files[0],'SELECT username,nick_name,remark FROM contact WHERE username=?',(peer['username'],))

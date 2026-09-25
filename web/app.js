@@ -85,7 +85,7 @@ function renderEvents(){const filter=$('event-filter').value;const rows=state.ev
 }
 $('event-filter').onchange=renderEvents;
 async function refresh(){
- try{const version=++refreshVersion;const next=await api('/api/state?peer_id='+encodeURIComponent(selectedPeer));if(version!==refreshVersion)return;state=next;peerChanging=false;const r=state.runtime;renderContacts();
+ try{const version=++refreshVersion;const next=await api('/api/state?peer_id='+encodeURIComponent(selectedPeer));if(version!==refreshVersion)return;state=next;peerChanging=false;const r=state.runtime;renderContacts();$('first-setup').classList.toggle('hidden',!state.setup?.required);$('app-version').textContent='v'+state.version;
   $('connection').textContent=labels[r.state]||r.state;$('connection').className='badge'+(['error','needs_user'].includes(r.state)?' bad':'');
   $('toggle').textContent=r.enabled?'暂停监听':'开始监听';$('toggle').disabled=!r.connected;
   $('target').textContent=r.target||'微信尚未连接';$('current-model').textContent=(state.settings.profile_name?state.settings.profile_name+' · ':'')+(state.settings.provider==='codex'?`${state.settings.codex_model} · ${state.settings.reasoning}`:state.settings.api_model||'待配置 API');
@@ -145,3 +145,9 @@ $('add-contact').onclick=()=>action(async()=>{
 });
 $('pause-all').onclick=()=>action(async()=>{await api('/api/control',{enabled:false,all:true});toast('所有联系人已暂停');});
 refresh();setInterval(refresh,1000);
+
+$('save-setup').onclick=()=>action(async()=>{await api('/api/setup',{data_root:$('setup-root').value.trim(),identifier:$('setup-peer').value.trim()});toast('配置已保存，正在连接微信；请继续配置模型');});
+$('check-update').onclick=()=>action(async()=>{
+ const button=$('check-update');button.disabled=true;$('update-note').textContent='正在检查…';
+ try{const update=await api('/api/update/check',{});$('update-note').textContent=update.available?'发现新版 '+update.latest:'当前已是最新版本';$('release-link').classList.toggle('hidden',!update.available);$('release-link').href=update.url;}catch(e){$('update-note').textContent=e.message;throw e;}finally{button.disabled=false;}
+});

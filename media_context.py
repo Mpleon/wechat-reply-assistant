@@ -6,7 +6,7 @@ from reader import scope,AUDIT
 from PIL import Image
 from cryptography.hazmat.primitives.ciphers import Cipher,algorithms,modes
 import imageio_ffmpeg
-BASE=Path(__file__).resolve().parent
+from runtime_paths import DATA_DIR as BASE,RESOURCE_DIR
 class MediaContext:
     def __init__(self,reader):
         self.reader=reader;self.key=None;self.attempted=False

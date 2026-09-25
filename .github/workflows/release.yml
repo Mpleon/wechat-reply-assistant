@@ -1,0 +1,45 @@
+name: Windows release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install build dependencies
+        run: python -m pip install -r requirements-build.txt
+      - name: Test
+        run: python -m unittest test_dashboard test_profiles test_usage test_contacts test_media_context test_sticker_failure test_release
+      - name: Validate tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: python -c "import os; from app_version import VERSION; assert os.environ['GITHUB_REF_NAME']=='v'+VERSION"
+      - name: Build installer and portable archive
+        shell: pwsh
+        run: |
+          $compiler = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $compiler)) { throw 'Inno Setup 6 compiler missing from runner' }
+          python packaging/build.py --iscc $compiler
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: |
+            release/*/*.exe
+            release/*/*.zip
+            release/*/SHA256SUMS.txt
+            release/*/self-test.json
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $version = python -c "from app_version import VERSION; print(VERSION)"
+          $assets = @(Get-ChildItem "release/$version" -File | Where-Object { $_.Extension -in '.exe','.zip' -or $_.Name -eq 'SHA256SUMS.txt' } | ForEach-Object FullName)
+          gh release create $env:GITHUB_REF_NAME @assets --verify-tag --title "微信回复台 $env:GITHUB_REF_NAME" --notes-file docs/RELEASE_NOTES.md

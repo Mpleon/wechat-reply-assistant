@@ -4,7 +4,7 @@ import sys,os,ast,ctypes,json,logging,time,struct,re
 from ctypes import wintypes
 from functools import lru_cache
 from typing import List,Optional,Tuple,Dict
-BASE=Path(__file__).resolve().parent
+from runtime_paths import DATA_DIR as BASE,RESOURCE_DIR
 from runtime_paths import DEPS,UPSTREAM
 import uiautomation as auto
 import win32gui,win32process

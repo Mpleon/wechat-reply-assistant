@@ -57,3 +57,16 @@
 !app_contacts.py
 !test_contacts.py
 !test_contacts_browser.cjs
+
+!app_version.py
+!app_update.py
+!desktop.py
+!requirements-build.txt
+!packaging/
+!packaging/*.py
+!packaging/*.spec
+!packaging/*.iss
+!.github/
+!.github/workflows/
+!.github/workflows/release.yml
+!test_release.py
