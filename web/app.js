@@ -2,6 +2,7 @@
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let state=null, selected='', editorKey='', formDirty=false, formRevision=0, messageSignature='', eventSignature='', toastTimer, followLatest=true;
+let selectedPeer=sessionStorage.getItem('selectedPeer')||'legacy',peerChanging=false,refreshVersion=0;
 let selectedProfile=null,profileEditorVersion=0,profileEditorId=null,modelDirty=false;
 const modelFields=new Set(['provider','codex-model','reasoning','base-url','api-protocol','api-model','api-key','api-stream','clear-key','profile-name']);
 const latestButton=document.createElement('button');latestButton.className='quiet';latestButton.textContent='最新 ↓';latestButton.title='跳到最新消息';
@@ -12,7 +13,7 @@ latestButton.onclick=()=>{followLatest=true;jumpLatest();};
 const labels={starting:'正在启动',connecting:'连接微信中',watching:'正在监听',paused:'已暂停',preparing:'准备上下文',generating:'正在生成',sending:'正在发送',needs_user:'需要处理',error:'连接异常',queued:'等待生成',awaiting:'待你确认',send_queued:'准备发送',sent:'已核验发送',partial:'部分完成',skipped:'已跳过',stale:'上下文已更新',failed:'失败',uncertain:'发送待核对',cancelled:'已取消',superseded:'已有修改版',no_reply:'暂不回复'};
 const sources={incoming:'新消息回复',manual:'主动生成',revision:'修改版本'};
 function toast(text,bad=false){$('toast').textContent=text;$('toast').className='toast'+(bad?' bad':'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.add('hidden'),5000);}
-async function api(path,payload){const options=payload===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':state?.csrf||''},body:JSON.stringify(payload)};const r=await fetch(path,options);const data=await r.json();if(!r.ok)throw Error(data.error||'请求失败');return data;}
+async function api(path,payload){if(payload!==undefined){if(peerChanging)throw Error('正在切换联系人，请稍候');payload={...payload,peer_id:state?.peer_id||selectedPeer};}const options=payload===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':state?.csrf||''},body:JSON.stringify(payload)};const r=await fetch(path,options);const data=await r.json();if(!r.ok)throw Error(data.error||'请求失败');return data;}
 async function action(fn){try{await fn();await refresh();}catch(e){toast(e.message,true);}}
 function sticker(id){return state?.stickers.find(s=>s.md5===id);}
 function stickerURL(s){return s?.file?'/media/stickers/'+encodeURIComponent(s.file):'';}
@@ -41,7 +42,7 @@ function activeJob(){return state?.jobs.find(j=>j.id===selected);}
 function renderDraft(){
  if(!selected||!state.jobs.some(j=>j.id===selected))selected=state.jobs[0]?.id||'';
  const picker=$('draft-picker');picker.innerHTML=state.jobs.length?state.jobs.map(j=>`<option value="${j.id}" ${j.id===selected?'selected':''}>${esc(j.created_at.slice(5))} · ${sources[j.source]||j.source} · ${labels[j.status]||j.status}</option>`).join(''):'<option value="">还没有草稿</option>';
- const j=activeJob();if(!j)return;
+ const j=activeJob();if(!j){$('draft-editor').innerHTML='<div class="empty">当前联系人暂无草稿</div>';['draft-meta','draft-usage','draft-reason','draft-warning'].forEach(id=>$(id).textContent='');$('draft-state').textContent='暂无草稿';['approve','skip','save-edit'].forEach(id=>$(id).disabled=true);['editor-tools','revision-area'].forEach(id=>$(id).classList.add('hidden'));return;}
  $('draft-state').textContent=labels[j.status]||j.status;$('draft-state').className='badge'+(['failed','uncertain','needs_user'].includes(j.status)?' bad':'');
  $('draft-meta').textContent=[sources[j.source],j.configuration?.profile_name,j.model,j.settings_revision?'配置 v'+j.settings_revision:'',j.metrics?j.metrics.seconds+' 秒':'',j.image_count?j.image_count+' 个媒体附件':''].filter(Boolean).join(' · ');
  $('draft-usage').innerHTML=tokenHTML(j.metrics||j.progress);
@@ -84,7 +85,7 @@ function renderEvents(){const filter=$('event-filter').value;const rows=state.ev
 }
 $('event-filter').onchange=renderEvents;
 async function refresh(){
- try{state=await api('/api/state');const r=state.runtime;
+ try{const version=++refreshVersion;const next=await api('/api/state?peer_id='+encodeURIComponent(selectedPeer));if(version!==refreshVersion)return;state=next;peerChanging=false;const r=state.runtime;renderContacts();
   $('connection').textContent=labels[r.state]||r.state;$('connection').className='badge'+(['error','needs_user'].includes(r.state)?' bad':'');
   $('toggle').textContent=r.enabled?'暂停监听':'开始监听';$('toggle').disabled=!r.connected;
   $('target').textContent=r.target||'微信尚未连接';$('current-model').textContent=(state.settings.profile_name?state.settings.profile_name+' · ':'')+(state.settings.provider==='codex'?`${state.settings.codex_model} · ${state.settings.reasoning}`:state.settings.api_model||'待配置 API');
@@ -128,4 +129,19 @@ function tokenText(m){const u=m?.usage;if(!u)return usageNote(m);return `输入 
 function tokenHTML(m,reference=false){const u=m?.usage;if(!u)return `<div class="usage-note">${esc(usageNote(m))}</div>`;return `<div class="token-grid"><div><span>输入</span><b>${tokenNumber(u.input_tokens)}</b></div><div><span>输出</span><b>${tokenNumber(u.output_tokens)}</b></div><div><span>输入中缓存命中</span><b>${tokenNumber(u.cached_input_tokens)}</b></div><div><span>缓存命中率</span><b>${u.cache_hit_rate==null?'—':u.cache_hit_rate+'%'}</b></div><div><span>合计 Token</span><b>${tokenNumber(u.total_tokens)}</b></div></div><div class="usage-note">${esc(usageNote(m))}${u.reasoning_output_tokens!=null?` · 输出中推理 ${tokenNumber(u.reasoning_output_tokens)}`:''}${reference?' · 关联生成用量，本次发送不重复计费':''}${m.call_id?' · 调用 '+esc(m.call_id.slice(0,8)):''}</div>`;}
 function renderUsage(){const calls=state.calls||[];const running=calls.filter(c=>!['completed','failed','interrupted'].includes(c.phase));const shown=running.length?running:calls.slice(0,1);liveUsage.classList.toggle('hidden',!shown.length);const ops={manual:'主动生成',incoming:'新消息回复',revision:'修改草稿',connectivity_test:'模型连通性测试'};const phases={connecting:'连接中',starting:'启动模型',generating:'正在生成',receiving:'接收输出',completed:'已完成',failed:'失败',interrupted:'已中断'};
  liveUsage.innerHTML=shown.map(c=>{const active=!['completed','failed','interrupted'].includes(c.phase);const elapsed=active&&c.started_at?Math.max(0,Date.now()/1000-c.started_at).toFixed(1):c.seconds;return `<div class="usage-call"><div class="usage-title"><strong>${active?'当前操作':'最近一次调用'} · ${ops[c.operation]||'模型生成'}</strong><span class="subtle">${esc(c.model)} · ${phases[c.phase]||esc(c.phase)} · ${esc(elapsed)} 秒</span></div>${tokenHTML(c)}${active?`<div class="usage-note">已接收输出 ${tokenNumber(c.output_characters)} 个字符（不等于 Token，不含不可见推理）</div>`:''}</div>`}).join('');}
+function renderContacts(){
+ const picker=$('contact-picker');const options=state.contacts.map(c=>`<option value="${esc(c.id)}">${esc(c.display_name)} · ${c.runtime.enabled?'监听中':'已暂停'}${c.runtime.error?' · 连接异常':''}</option>`).join('');
+ if(picker.innerHTML!==options)picker.innerHTML=options;picker.value=state.peer_id;
+}
+$('contact-picker').onchange=async e=>{
+ selectedPeer=e.target.value;sessionStorage.setItem('selectedPeer',selectedPeer);peerChanging=true;
+ selected='';editorKey='';messageSignature='';eventSignature='';$('topic').value='';$('revision-prompt').value='';
+ $('draft-editor').innerHTML='<div class="empty">正在切换联系人…</div>';
+ await refresh();
+};
+$('add-contact').onclick=()=>action(async()=>{
+ const button=$('add-contact');button.disabled=true;
+ try{const peer=await api('/api/contacts/add',{identifier:$('contact-identifier').value.trim()});selectedPeer=peer.id;sessionStorage.setItem('selectedPeer',selectedPeer);selected='';editorKey='';messageSignature='';eventSignature='';$('contact-identifier').value='';toast('已添加，默认暂停；确认联系人后点击开始监听');}finally{button.disabled=false;}
+});
+$('pause-all').onclick=()=>action(async()=>{await api('/api/control',{enabled:false,all:true});toast('所有联系人已暂停');});
 refresh();setInterval(refresh,1000);

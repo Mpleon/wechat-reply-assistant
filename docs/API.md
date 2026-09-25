@@ -49,3 +49,12 @@ POST `/api/profiles/save`：
 parts 为 1–4 个 `{kind:"text"|"sticker",value:"文字或表情标识"}`。文本单条最多 500 字，表情必须在可用目录中。服务端固定收件人，客户端不能通过请求换收件人。
 
 POST `/api/settings` 保存 system_prompt、use_style、mode、quiet_seconds。旧客户端提交模型字段时仅尝试更新当前配置；新页面使用独立的模型配置接口。
+
+
+## 联系人
+
+- `GET /api/state?peer_id=<id>`：返回所选联系人的 runtime/jobs/messages/events/calls，以及全局 contacts 列表。省略 id 兼容原联系人 legacy。
+- `POST /api/contacts/add {identifier}`：微信号或内部 wxid，唯一解析后保存，默认暂停。重复账号拒绝。
+- control/reconnect/generate/media 和 jobs 操作均支持 `peer_id`。草稿只能在所属联系人下操作。
+- `POST /api/control {enabled:false,all:true}`：全部暂停；不支持一键开启所有人。
+- 模型、提示词、回复方式设置仍为全局。每个浏览器标签页独立选择联系人。

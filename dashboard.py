@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 import argparse,ctypes,json,mimetypes,os,secrets,socket,threading,time,urllib.parse,uuid
 from app_store import Store,Conflict,DEFAULTS,now
 from app_engine import Engine
+from app_contacts import Contacts
 import app_models
 BASE=Path(__file__).resolve().parent
 WEB=BASE/'web'
@@ -12,7 +13,8 @@ class Application:
     def __init__(self,store=None,secret_store=None,engine=None):
         data=BASE/'app-data';data.mkdir(exist_ok=True)
         self.store=store or Store(data/'dashboard.sqlite3');self.secrets=secret_store or app_models.Secrets()
-        self.engine=engine or Engine(self.store,self.secrets)
+        self.contacts=Contacts(self.store,self.secrets,BASE,engine)
+        self.engine=self.contacts.get()
         self.token=secrets.token_urlsafe(32);self.tests={};self.test_lock=threading.RLock()
         self.test_pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='model-connectivity')
         if store is None:self.import_legacy()
@@ -32,7 +34,8 @@ class Application:
                         self.store.db.commit()
                 except (ValueError,KeyError):pass
         marker.write_text(now(),encoding='utf-8')
-    def snapshot(self):
+    def snapshot(self,peer_id=None):
+        engine=self.contacts.get(peer_id);local=engine.store
         cfg=self.store.settings()
         try:cfg['has_api_key']=bool(app_models.credential_for(self.secrets,cfg).get())
         except Exception:cfg['has_api_key']=False
@@ -43,8 +46,8 @@ class Application:
             profiles.append(profile)
         stickers=[{k:s.get(k) for k in ('md5','description','file','native_verified')} for s in app_models.catalog()]
         with self.test_lock:tests=list(self.tests.values())[-8:]
-        return {'csrf':self.token,'runtime':self.engine.snapshot(),'settings':cfg,'jobs':self.store.jobs(),
-                'messages':self.store.messages(),'events':self.store.events(),'calls':self.store.calls(),'stickers':stickers,'tests':tests,'profiles':profiles}
+        return {'csrf':self.token,'peer_id':peer_id or 'legacy','contacts':self.contacts.list(),'runtime':engine.snapshot(),'settings':cfg,'jobs':local.jobs(),
+                'messages':local.messages(),'events':local.events(),'calls':local.calls(),'stickers':stickers,'tests':tests,'profiles':profiles}
     def test_model(self,payload):
         cfg={**self.store.settings(),**{k:v for k,v in payload.get('settings',{}).items() if k in DEFAULTS}}
         if cfg['provider'] not in ('codex','custom'):raise ValueError('未知模型来源')
@@ -79,8 +82,13 @@ class Application:
         self.test_pool.submit(work)
         return {'id':testid}
     def action(self,path,p):
-        if path=='/api/control':return self.engine.control(p.get('enabled') is True)
-        if path=='/api/reconnect':self.engine.commands.put(('reconnect',None));return {'ok':True}
+        if path=='/api/contacts/add':return self.contacts.add(p.get('identifier',''))
+        if path=='/api/control' and p.get('all') and p.get('enabled') is not True:return self.contacts.stop_all()
+        engine=self.contacts.get(p.get('peer_id'))
+        if path=='/api/control':return engine.control(p.get('enabled') is True)
+        if path=='/api/reconnect':
+            with self.contacts.read_lock:self.contacts.reader=None
+            engine.commands.put(('reconnect',None));return {'ok':True}
         if path=='/api/settings':
             cfg=p.get('settings',{})
             if cfg.get('provider')=='custom':app_models.endpoint({**self.store.settings(),**cfg})
@@ -126,15 +134,15 @@ class Application:
         if path=='/api/generate':
             instruction=p.get('instruction','')
             if not isinstance(instruction,str) or len(instruction)>6000:raise ValueError('话题说明最多 6000 字')
-            return self.engine.proactive(instruction)
-        if path=='/api/media':self.engine.commands.put(('media',str(p['message_id'])));return {'ok':True}
+            return engine.proactive(instruction)
+        if path=='/api/media':engine.commands.put(('media',str(p['message_id'])));return {'ok':True}
         if path.startswith('/api/jobs/'):
             _,_,_,jobid,operation=path.split('/')
             version=int(p['version'])
-            if operation=='approve':return self.engine.approve(jobid,version,p['parts'])
-            if operation=='edit':return self.engine.edit(jobid,version,p['parts'])
-            if operation=='revise':return self.engine.revise(jobid,version,p.get('instruction',''),p.get('parts',[]))
-            if operation=='skip':return self.engine.skip(jobid,version)
+            if operation=='approve':return engine.approve(jobid,version,p['parts'])
+            if operation=='edit':return engine.edit(jobid,version,p['parts'])
+            if operation=='revise':return engine.revise(jobid,version,p.get('instruction',''),p.get('parts',[]))
+            if operation=='skip':return engine.skip(jobid,version)
         raise ValueError('未知操作')
 
 def handler(app):
@@ -159,7 +167,10 @@ def handler(app):
             if not self.allowed():return self.send(403,{'error':'只允许本机页面访问'})
             path=urllib.parse.unquote(urllib.parse.urlsplit(self.path).path)
             if path=='/api/health':return self.send(200,{'service':'wechat-reply-dashboard','pid':os.getpid()})
-            if path=='/api/state':return self.send(200,app.snapshot())
+            if path=='/api/state':
+                peer_id=urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get('peer_id',[None])[0]
+                try:return self.send(200,app.snapshot(peer_id))
+                except ValueError as exc:return self.send(400,{'error':str(exc)})
             if path.startswith('/media/'):
                 pieces=path.split('/')
                 if len(pieces)!=4 or pieces[2] not in ('stickers','incoming'):return self.send(404,{'error':'文件不存在'})
@@ -192,9 +203,9 @@ def main():
     if k.GetLastError()==183:raise SystemExit('Another reply worker is active; stop it before launching the dashboard')
     app=Application()
     server=ThreadingHTTPServer(('127.0.0.1',args.port),handler(app))
-    app.engine.start()
+    app.contacts.start()
     (BASE/'dashboard.pid').write_text(str(os.getpid()),encoding='ascii')
     print('Local dashboard: http://127.0.0.1:'+str(args.port),flush=True)
     try:server.serve_forever()
-    finally:app.engine.closed=True;server.server_close()
+    finally:app.contacts.close();server.server_close()
 if __name__=='__main__':main()

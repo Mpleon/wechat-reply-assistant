@@ -5,6 +5,7 @@ import copy,hashlib,json,os,queue,threading,time,xml.etree.ElementTree as ET
 from app_store import Conflict,now
 import app_models
 BASE=Path(__file__).resolve().parent
+SEND_LOCK=threading.RLock()
 
 def message_id(m):return str(m['server_id']) if m['server_id'] else m['database']+':'+str(m['local_id'])
 def revision(messages):
@@ -75,7 +76,6 @@ class Engine:
             if self.sender is None:
                 import native_send
                 native_send.n.auto.InitializeUIAutomationInCurrentThread()
-                native_send.TARGET=self.reader.target_name;native_send.ALLOWED={self.reader.target_name,'文件传输助手'}
                 self.sender=native_send
             self._refresh();self.watermark=max((m['sort_seq'] for m in self.raw),default=0)
             self.state(state='watching' if self.enabled else 'paused',connected=True,target=self.reader.target_name,error='')
@@ -179,6 +179,16 @@ class Engine:
             self.store.event('error',job_id=jobid,message='生成失败：'+str(e),metrics=self.store.job(jobid).get('progress'))
         finally:self.state(state='watching' if self.enabled else 'paused')
     def _send(self,jobid):
+        with SEND_LOCK:
+            if self.reader is not None and hasattr(self.reader,'resolve_contact'):
+                try:
+                    peer=self.reader.resolve_contact(self.reader.target)
+                    if peer['display_name']!=self.reader.target_name:raise ValueError('联系人备注已变化，请重新连接后生成新草稿')
+                    self.sender.ALLOWED={peer['display_name']}
+                except Exception as exc:
+                    self.store.update(jobid,status='failed',error=str(exc));return
+            return self._send_locked(jobid)
+    def _send_locked(self,jobid):
         job=self.store.job(jobid)
         if job['status']!='send_queued':return
         if self.reader is None:self.store.update(jobid,status='failed',error='微信未连接');return

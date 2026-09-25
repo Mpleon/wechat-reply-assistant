@@ -34,3 +34,5 @@ node test_profiles_browser.cjs
 `.gitignore` 默认排除所有文件，再逐项放行程序、测试、文档和许可证。新源码文件需要显式加入放行列表。不要使用 `git add -f` 绕过私有数据排除。
 
 已知测试限制：自定义服务的真实模型、账户权限、图片支持和流式兼容性必须用用户自己的配置在页面测试；本地模拟 HTTP 测试不能证明所有服务商兼容。
+
+多联系人回归：`python -m unittest test_contacts` 与 `node test_contacts_browser.cjs`。浏览器测试拦截 API，使用虚拟联系人验证添加、切换、独立启停，不新增真实联系人、不发送微信消息。

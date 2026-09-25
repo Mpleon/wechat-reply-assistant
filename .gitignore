@@ -53,3 +53,7 @@
 !app-test-tools/
 !app-test-tools/package.json
 !app-test-tools/package-lock.json
+
+!app_contacts.py
+!test_contacts.py
+!test_contacts_browser.cjs

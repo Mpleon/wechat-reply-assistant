@@ -49,7 +49,7 @@ class ReadVFS(apsw.VFS):
         if p not in self.keys:raise apsw.CantOpenError('Unlisted database')
         return PageFile(name,flags,self.keys[p])
 class Reader:
-    def __init__(self):
+    def __init__(self,contact_only=False):
         roots=[p/'db_storage' for p in data_root().iterdir() if (p/'db_storage').is_dir()]
         if len(roots)!=1:raise RuntimeError('Ambiguous account')
         self.root=roots[0]
@@ -62,6 +62,8 @@ class Reader:
             if len(keys)==len(self.files):break
         if len(keys)!=len(self.files):raise RuntimeError('Missing database key')
         self.vfs=ReadVFS(keys)
+        self.self_id=self.root.parent.name.rsplit('_',1)[0]
+        if contact_only:return
         peer_file=Path(__file__).resolve().parent/'peer.json'
         if peer_file.exists():
             peer=json.loads(peer_file.read_text(encoding='utf-8'))
@@ -73,6 +75,24 @@ class Reader:
         if len(found)!=1:raise RuntimeError('Ambiguous contact')
         self.target=found[0]['username'];self.target_name=found[0]['remark'] or found[0]['nick_name'] or self.target
         self.self_id=self.root.parent.name.rsplit('_',1)[0]
+    def resolve_contact(self,identifier):
+        identifier=identifier.strip()
+        if not identifier or len(identifier)>200:raise ValueError('请填写微信号或内部 wxid')
+        columns={r['name'] for r in self.query(self.files[0],'PRAGMA table_info(contact)')}
+        fields=['username']+(['alias'] if 'alias' in columns else [])
+        found=self.query(self.files[0],'SELECT username,nick_name,remark FROM contact WHERE '+' OR '.join(f+'=?' for f in fields),tuple(identifier for _ in fields))
+        if len(found)!=1:raise ValueError('未找到唯一联系人，请填写微信号或内部 wxid；不支持昵称搜索')
+        row=found[0];username=row['username']
+        if username==self.self_id or username.endswith('@chatroom') or username.startswith('gh_'):raise ValueError('目前仅支持其他个人联系人')
+        name=row['remark'] or row['nick_name'] or username
+        matches=self.query(self.files[0],"SELECT username FROM contact WHERE COALESCE(NULLIF(remark,''),NULLIF(nick_name,''),username)=?",(name,))
+        if len(matches)!=1:raise ValueError('联系人显示名称重复，请先在微信中设置唯一备注，再重试')
+        return {'username':username,'display_name':name,'identifier':identifier}
+    def for_contact(self,identifier):
+        import copy
+        peer=self.resolve_contact(identifier);reader=copy.copy(self)
+        reader.target=peer['username'];reader.target_name=peer['display_name']
+        return reader
     def query(self,path,sql,args=()):
         for attempt in range(3):
             conn=None
