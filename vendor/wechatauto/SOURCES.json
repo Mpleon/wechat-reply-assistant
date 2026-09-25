@@ -1,0 +1,11 @@
+{
+  "project": "fanyuantaier/wechatauto-replica",
+  "source": "https://github.com/fanyuantaier/wechatauto-replica",
+  "license": "Apache-2.0",
+  "note": "Previously reviewed source snapshots, retained verbatim; hashes are authoritative, no upstream release tag is asserted.",
+  "files": {
+    "db.py": "a7e77ea7fc5a2d0510a038c3d8ca25f0e8932e9f81234af7a38497b8d0240713",
+    "media.py": "20f5f8546f351e936689d815de29e6f47c459e1dfcc3076bfd3b9b6a515d0b32",
+    "uia_driver.py": "17519c1706bde7f75c266d4a0f713e6808470f8b6464f151365d6250db6a9e94"
+  }
+}

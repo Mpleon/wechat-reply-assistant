@@ -1,0 +1,4 @@
+* text=auto eol=lf
+*.ps1 text eol=crlf
+# Preserve audited upstream bytes/checksums, including upstream whitespace.
+vendor/wechatauto/*.py -text -whitespace
