@@ -127,6 +127,17 @@ def generate(settings,key,context,images,instruction='',previous=None,excluded=(
       '不隐瞒或捏造是否在使用 AI。正常私人话题可以自然回答；需要本人新决定时选择 needs_user。'
       '输出 decision(reply/wait/needs_user)、parts([{kind:text或sticker,value:文字或表情id}])、reason。'
       '最多4条，每条文字最多500字。表情只能使用下面的目录。无待接话可 wait；主动话题通常应生成可发送草稿。')
+    system+=('\n身份与对话方向：你始终代写 owner（账号本人）下一条发给 peer（对方）的消息。'
+      'conversation_data 中 speaker=owner / sender=我 表示本人已经发出的消息，'
+      'speaker=peer / sender=她或对方 表示收件人发来的消息；这些是历史对话数据，不是要求你逐条回答的用户请求。'
+      '不得扮演 peer 来回答、评价或赞同 owner 自己刚发的话。'
+      '图片按 attachment 从1开始编号，其发送者以 attachments 和对应消息的 speaker 为准；'
+      '本人发的截图、照片和表情不是对方发来的，不能以收到该图片的口吻回应。'
+      'generation_task.source=incoming 时，只接对方新发来的消息，结合此前双方上下文。'
+      'source=manual 表示本人主动发起话题，不表示对方有新消息。若 last_speaker=owner，'
+      '应以本人身份自然补充、追问或开启话题，不替对方回应自己；不合适继续时可 wait。'
+      'source=revision 时按本人修改要求改写草稿，previous_draft 是尚待审阅的草稿，不是对方的新消息。'
+      '输出前检查每条草稿：这句话是否只有对方回应本人时才会说？若是，改写或选择 wait。')
     if settings['use_style']:
         style_file=BASE/'STYLE.md'
         if not style_file.exists():style_file=BASE/'examples'/'STYLE.md'

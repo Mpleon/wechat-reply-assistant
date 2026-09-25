@@ -105,7 +105,9 @@ class MediaContext:
         picture_seqs={m['sort_seq'] for m in historical_pictures}
         for m in messages:
             kind=m['local_type']&0xffffffff
-            row={'sender':m['sender'],'time':time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(m['create_time']))}
+            role='owner' if m['sender']=='我' else 'peer' if m['sender'] in ('她','对方') else 'system'
+            row={'sender':m['sender'],'speaker':role,'message_seq':m['sort_seq'],
+                 'time':time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(m['create_time']))}
             new=m['sort_seq']>new_since and m['sender']=='她'
             if kind==1:row['text']=m['content']
             elif kind==47 or m['local_type']==34359738417:
@@ -130,4 +132,10 @@ class MediaContext:
                 if new:raise RuntimeError('Incoming voice/video needs user interpretation')
             context.append(row)
         if len(images)>5:raise RuntimeError('Too many incoming images for one reply')
-        return {'messages':context},images
+        human=[row for row in context if row['speaker'] in ('owner','peer')]
+        return {'speaker_definitions':{'owner':'账号本人，你要代写的身份；我发出的历史消息',
+                                      'peer':'收件人，对方发来的历史消息','system':'系统通知'},
+                'messages':context,'last_speaker':human[-1]['speaker'] if human else None,
+                'attachments':[{'attachment':row['attachment'],'speaker':row['speaker'],
+                                'message_seq':row['message_seq'],'time':row['time']}
+                               for row in context if 'attachment' in row]},images

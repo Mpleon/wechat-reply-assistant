@@ -59,3 +59,8 @@ SQLite `model_profiles` 保存配置 ID、显示名、模型来源、Base URL、
 每人一个 Engine、消息水位和生成队列。数据库解密 VFS 共享只读密钥映射，SQL 查询各开独立连接。微信发送用进程级 SEND_LOCK 包住选人、点击、发送核验；发送前重新查询稳定账号，要求唯一显示名且备注未变，避免按重名发送。备注变化需要重新连接和重新生成。HTTP 请求使用 peer_id 定位引擎；不存在于该库的 job_id 无法跨联系人审批。浏览器选择存在 sessionStorage，不改变其他标签页选择。
 
 重启不重放旧生成和发送，新增联系人不会自动开启。全部暂停依次获得各引擎发送门锁，已开始的点击不能撤回。
+
+
+## 草稿说话身份
+
+MediaContext 给每条消息提供 speaker=owner/peer/system、message_seq 与原 sender 标签；attachments 将图片序号绑定到发送者，last_speaker 标明最后发言人。Engine 在 generation_task 中提供 incoming/manual/revision 和本次新增对方消息序号。模型始终以 owner 身份写给 peer，manual 不能被当成对方发来了新消息。聊天仍作为结构化历史数据输入，不把已发送的 owner 消息当作待回答的用户请求。该约束改善方向理解，但不构成对模型语义正确性的保证。

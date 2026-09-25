@@ -145,6 +145,9 @@ class Engine:
             if not self.raw:raise ValueError('尚无可用对话上下文')
             since=self.watermark if j['source']=='incoming' else self.raw[-1]['sort_seq']-1
             context,images=self.media.prepare(self.raw,since)
+            context['generation_task']={'source':j['source'],'write_as':'owner','recipient':'peer',
+                'new_peer_message_seqs':[m['sort_seq'] for m in self.raw
+                    if j['source']=='incoming' and m['sort_seq']>since and m['sender'] in ('她','对方')]}
             self._cache_previews(context,images)
             key=app_models.credential_for(self.secrets,settings).get() if settings['provider']=='custom' else ''
             if self.epoch!=captured_epoch or self.store.job(jobid)['status']=='cancelled':return
